@@ -15,7 +15,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/nextbsd-redux/nextbsd-kernel-toolchain
+  IMAGE: ghcr.io/nextbsd/nextbsd-kernel-toolchain
   FREEBSD_BRANCH: releng/15.1
 
 jobs:
