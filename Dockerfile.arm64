@@ -56,7 +56,7 @@ ENV CCACHE_CROSS_BINDIR=/opt/ccache-cross
 # Shallow (no git history) is fine; sparse is what breaks it.
 # FREEBSD_SHA pins the baked source to the change-detected commit.
 RUN git clone --depth 1 --branch "${FREEBSD_BRANCH}" \
-        https://github.com/nextbsd-redux/freebsd-src.git /usr/src \
+        https://github.com/nextbsd/freebsd-src.git /usr/src \
     && if [ -n "${FREEBSD_SHA}" ]; then \
          cd /usr/src \
          && git fetch --depth 1 origin "${FREEBSD_SHA}" \
