@@ -21,6 +21,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    outputs:
+      # #423: promoted so the notify job below can forward it -- steps.*.outputs
+      # is not reachable across jobs.
+      sha: ${{ steps.src.outputs.sha }}
     strategy:
       fail-fast: false
       matrix:
@@ -92,31 +96,39 @@ jobs:
           # FREEBSD_SHA source, so a stale layer can never pin an old base version.
           no-cache: true
 
-      # Only the amd64 leg drives the (amd64-only) kernel build, and only on main
-      # — branch/PR builds are for testing and must not cascade or touch prod.
-      - name: Trigger downstream kernel build (amd64, main only)
-        if: matrix.target == 'amd64' && github.ref_name == 'main'
+  # #423: the downstream dispatch used to fire from INSIDE the build matrix,
+  # off the amd64 leg only -- the moment amd64 pushed, the downstream arm64
+  # jobs started pulling arm64-fbsd-<sha>, which arm64 (it trails amd64 by
+  # ~40-60s) had not pushed yet. The pull retries (1.6s/6.5s/9.9s backoff,
+  # ~19s total) gave up ~30s before the tag landed: `manifest unknown`, and on
+  # 2026-08-26 the whole nightly chain stalled (kernel + compat arm64 legs
+  # failed, both publishes skipped). A `needs: build` job waits for ALL matrix
+  # legs (fail-fast: false, so a failed leg still fails `build` and correctly
+  # blocks the cascade rather than dispatching against a missing tag) and fans
+  # out only then. Same firing conditions as before (main, non-PR), so a
+  # branch/PR build still never cascades.
+  notify:
+    name: notify downstream (both toolchain images pushed)
+    runs-on: ubuntu-24.04
+    needs: build
+    if: github.ref_name == 'main' && github.event_name != 'pull_request'
+    steps:
+      # nextbsd-kernel reads client_payload.fbsd_sha to pin its toolchain
+      # image tag; the PAT stays only on this step.
+      - name: Trigger downstream kernel build
         run: |
-          gh api repos/nextbsd-redux/nextbsd-kernel/dispatches \
+          gh api repos/nextbsd/nextbsd-kernel/dispatches \
             -f event_type=toolchain-updated \
-            -f "client_payload[image_tag]=${{ steps.src.outputs.image_tag }}" \
-            -f "client_payload[fbsd_sha]=${{ steps.src.outputs.sha }}" \
-            -f "client_payload[target]=${{ matrix.target }}"
+            -f "client_payload[fbsd_sha]=${{ needs.build.outputs.sha }}"
         env:
           GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
-
       # nextbsd-freebsd-compat consumes the SAME toolchain image as the kernel
-      # build (it cross-builds the from-source base with it), so it must rebuild
-      # whenever the toolchain/freebsd-src changes — in parallel with the kernel
-      # leg. Without this, compat only ever built on manual workflow_dispatch.
-      # compat reads client_payload.fbsd_sha to pin its container image tag.
-      - name: Trigger downstream base (compat) build (amd64, main only)
-        if: matrix.target == 'amd64' && github.ref_name == 'main'
+      # build (it cross-builds the from-source base with it), so it must
+      # rebuild whenever the toolchain/freebsd-src changes.
+      - name: Trigger downstream base (compat) build
         run: |
-          gh api repos/nextbsd-redux/nextbsd-freebsd-compat/dispatches \
+          gh api repos/nextbsd/nextbsd-freebsd-compat/dispatches \
             -f event_type=toolchain-updated \
-            -f "client_payload[image_tag]=${{ steps.src.outputs.image_tag }}" \
-            -f "client_payload[fbsd_sha]=${{ steps.src.outputs.sha }}" \
-            -f "client_payload[target]=${{ matrix.target }}"
+            -f "client_payload[fbsd_sha]=${{ needs.build.outputs.sha }}"
         env:
           GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}

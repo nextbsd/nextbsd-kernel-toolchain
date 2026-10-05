@@ -3,7 +3,7 @@
 Cross-compilation toolchain containers for the NextBSD kernel pipeline.
 
 Each image bakes a **shallow, full-tree** checkout of
-[`nextbsd-redux/freebsd-src`](https://github.com/nextbsd-redux/freebsd-src)
+[`nextbsd/freebsd-src`](https://github.com/nextbsd/freebsd-src)
 (`releng/15.1`) into `/usr/src`, pinned to an exact commit via the
 `FREEBSD_SHA` build-arg, then runs `kernel-toolchain`. Downstream kernel and
 module builds run *inside* this image, so they inherit the exact baked source —
